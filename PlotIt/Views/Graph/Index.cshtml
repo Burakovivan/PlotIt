@@ -1,0 +1,68 @@
+﻿@*@Scripts.Render("~/scripts/jquery.unobtrusive-ajax.js")*@
+@{
+    ViewBag.Title = "Index";
+}
+
+<h2>Index</h2>
+
+<div>
+    <div class="input-group form-group">
+        <span class="input-group-addon">y=</span>
+        <input type="text" id="expression" class="form-control" />
+    </div>
+    <button class="btn btn-success" style="float:right;" onclick="request()">Построить график <i class="fa fa-pencil"></i></button>
+    <br />
+    <hr />
+    <div class="graph-panel row">
+        <canvas id="canvas" width="200" height="200"></canvas>
+    </div>
+</div>
+
+@Scripts.Render("~/scripts/jquery-2.2.0.min.js")
+@Scripts.Render("~/scripts/bootstrap.min.js")
+<script>
+    var points = new Array();
+    function request() {
+        var exp = document.getElementById('expression').value;
+
+        var s = { 'expression': exp };
+        $.ajax({
+            url: '/Graph/Plot',
+            method: 'POST',
+            data: JSON.stringify(s),
+            contentType: 'application/json; charset=utf-8',
+            dataType: "json",
+            success: function (data) {
+
+                points = $.map(data, function (value, index) {
+                    return [value];
+                });
+                console.log(points);
+
+                var drawingCanvas = document.getElementById('canvas');
+                if (drawingCanvas && drawingCanvas.getContext) {
+                    var context = drawingCanvas.getContext('2d');
+
+                    context.clearRect(0, 0, canvas.width, canvas.height);
+                    context.strokeStyle = "#000";
+
+                    context.beginPath();
+                    context.moveTo(points[0], points[1]);
+
+                    var i = 2;
+
+                    while (i < (points.length)) {
+                        //console.log(i + " " + points[i]+ " " + points[i+1])
+                        context.lineTo(points[i], points[i + 1])
+                        i = i + 2;
+                    }
+                    context.stroke();
+                }
+            },
+        });
+    }
+
+
+</script>
+
+
