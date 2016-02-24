@@ -13,14 +13,129 @@ namespace PlottingGraphsSystem
         public static Func<double, double> GetFunction(string source)
         {
             RemoveClearSpaces(ref source);
-            return (Func<double, double>)Expression.Lambda(Analyze(source), VariableExpression).Compile();
+            return (Func<double, double>)Expression.Lambda(Analyze2(source), VariableExpression).Compile();
+        }
+
+        public static Expression Analyze2(string source)
+        {
+            Expression Result = Expression.Default(typeof(double));
+
+            #region Number
+            if (isConstatnExpression(source))
+            {
+                return Expression.Constant(double.Parse(source));
+            }
+            #endregion
+            else
+            #region Parametr
+            if (isParametrExpression(source))
+            {
+                if (source[0] == '-')
+                    Result = Expression.Multiply(Expression.Constant(-1d), VariableExpression);
+                else
+                    Result = VariableExpression;
+            }
+            #endregion
+            else
+            #region Brackets
+            if (isContainsBrackets(source))
+            {
+                if (source[0] == '-' && (OpeningBrackets).Contains(source[1]) && ClosingBrackets.Contains(source.Last()) & isSameBrackets(source, 2, source.Length - 1))
+                {
+                    return Expression.Multiply(Analyze2(source.Substring(2, source.Length - 3)), Expression.Constant(-1d));
+                }
+                //Если скобка в начале
+                if ((OpeningBrackets).Contains(source.First()))
+                {
+                    //Если скобка которая открылась в начале закрывается в конце
+                    if (ClosingBrackets.Contains(source.Last()) & isSameBrackets(source, 1, source.Length - 1))
+                    {
+                        Result = Analyze2(source.Substring(1, source.Length - 2));
+                    }
+                    else
+                    {
+                        int firstFree = GetFreeOperationIndex(source);
+
+                        Expression left = Analyze2(source.Substring(0, firstFree));
+                        Expression right = Analyze2(source.Substring(firstFree + 1));
+
+                        Result = GetExpressionFromOperator(left, right, GetOperator(source[firstFree]));
+                    }
+                }
+                else
+                {
+                    int firstFree = GetFreeOperationIndex(source);
+
+                    Expression left = Analyze2(source.Substring(0, firstFree));
+                    Expression right = Analyze2(source.Substring(firstFree + 1));
+
+                    Result = GetExpressionFromOperator(left, right, GetOperator(source[firstFree]));
+                }
+            }
+            else
+            {
+                int firstFree = GetFreeOperationIndex(source);
+
+                Expression left = Analyze2(source.Substring(0, firstFree));
+                Expression right = Analyze2(source.Substring(firstFree + 1));
+
+                Result = GetExpressionFromOperator(left, right, GetOperator(source[firstFree]));
+            }
+            #endregion
+
+
+            return Result;
+        }
+
+        /// <summary>
+        /// Возвращает индекс символа операции вне скобок по которому следует производить деление
+        /// </summary>
+        /// <param name="source">исходная строка</param>
+        /// <returns></returns>
+        public static int GetFreeOperationIndex(string source)
+        {
+            string temp = string.Empty;
+            int brackets = 0;
+            bool dimas = false;
+
+            for (int i = 0; i < source.Length; ++i)
+            {
+                if (OpeningBrackets.Contains(source[i]))
+                {
+                    brackets++;
+
+                }
+                else
+                if (ClosingBrackets.Contains(source[i]))
+                {
+                    if (brackets > 0)
+                    {
+                        brackets--;
+                        dimas = true;
+                    }
+                    else return -1;
+                }
+
+                if (brackets == 0 && !dimas) temp += source[i]; else { temp += "#"; dimas = false; }
+            }
+
+            foreach (char c in CorrectOrderOfOperation)
+            {
+                if (temp.Contains(c))
+                {
+                    if (temp.Count(g => g == c) != 1 || temp.IndexOf(c) != 0)
+                        return temp.IndexOf(c);
+                }
+            }
+            return -1;
+
         }
 
         public static Expression Analyze(string source)
         {
 
             source = source.Trim();
-            
+
 
             Expression AnalysResult = Expression.Default(typeof(double));
             //Если выражение содержит только параметр (аргумент функции)
@@ -165,12 +280,19 @@ namespace PlottingGraphsSystem
         /// <returns></returns>
         private static bool isConstatnExpression(string source)
         {
-            foreach (char c in source)
-            {
-                if (!(char.IsNumber(c) || c == '.' || c == ',' || c == '^' || c == 'x' || source[0] == '-'))
-                    return false;
-            }
-            return true;
+            double t;
+            return double.TryParse(source, out t);
+            //    if(source[0] == '-')
+            //    {
+            //        source = source.Substring(1);
+            //    }
+
+            //    foreach (char c in source)
+            //    {
+            //        if (!("0123456789,".Contains(c)))
+            //            return false;
+            //    }
+            //    return true;
         }
 
         /// <summary>
@@ -254,7 +376,7 @@ namespace PlottingGraphsSystem
             if (strartIndex < source.Length)
                 for (int i = strartIndex; i < source.Length; i++)
                 {
-                    if (!(char.IsNumber(source[i + 1]) || source[i + 1] == '.' || source[i + 1] == ',' || source[i + 1] == '^'))
+                    if (!(char.IsNumber(source[i + 1]) || ".,^".Contains(source[i + 1])))
                         return i;
                 }
             return -1;
@@ -303,17 +425,17 @@ namespace PlottingGraphsSystem
         /// <summary>
         /// Откраывющиеся скобки
         /// </summary>
-        public static string OpeningBrackets { get { return "(["; ; } }
+        public static string OpeningBrackets { get { return "("; ; } }
 
         /// <summary>
         /// Закрывающие скобки
         /// </summary>
-        public static string ClosingBrackets { get { return ")]"; } }
+        public static string ClosingBrackets { get { return ")"; } }
 
         /// <summary>
         /// Последовательность арифметических действий при анализе
         /// </summary>
-        public static string CorrectOrderOfOperation { get { return "+-*/"; } }
+        public static string CorrectOrderOfOperation { get { return "+-*/^"; } }
 
         public static string ClearSpaces { get { return " "; } }
 
