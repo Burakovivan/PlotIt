@@ -13,11 +13,12 @@ namespace PlottingGraphsSystem
         public static Func<double, double> GetFunction(string source)
         {
             RemoveClearSpaces(ref source);
-            return (Func<double, double>)Expression.Lambda(Analyze2(source), VariableExpression).Compile();
+            return (Func<double, double>)Expression.Lambda(Analyze(source), VariableExpression).Compile();
         }
 
-        public static Expression Analyze2(string source)
+        public static Expression Analyze(string source)
         {
+            //-sin(-x)
             Expression Result = Expression.Default(typeof(double));
 
             #region Number
@@ -31,18 +32,26 @@ namespace PlottingGraphsSystem
             if (isParametrExpression(source))
             {
                 if (source[0] == '-')
-                    Result = Expression.Multiply(Expression.Constant(-1d), VariableExpression);
+                    Result = Expression.Negate(VariableExpression);
                 else
                     Result = VariableExpression;
             }
             #endregion
+            else
+            if (isMathFunction(source))
+            {
+                if (source[0] == '-')
+                    Result = Expression.Negate(Analyze(source.Substring(1)));
+                else
+                    Result = GetUnaryExpression(source);
+            }
             else
             #region Brackets
             if (isContainsBrackets(source))
             {
                 if (source[0] == '-' && (OpeningBrackets).Contains(source[1]) && ClosingBrackets.Contains(source.Last()) & isSameBrackets(source, 2, source.Length - 1))
                 {
-                    return Expression.Multiply(Analyze2(source.Substring(2, source.Length - 3)), Expression.Constant(-1d));
+                    return Expression.Multiply(Analyze(source.Substring(2, source.Length - 3)), Expression.Constant(-1d));
                 }
                 //Если скобка в начале
                 if ((OpeningBrackets).Contains(source.First()))
@@ -50,36 +59,21 @@ namespace PlottingGraphsSystem
                     //Если скобка которая открылась в начале закрывается в конце
                     if (ClosingBrackets.Contains(source.Last()) & isSameBrackets(source, 1, source.Length - 1))
                     {
-                        Result = Analyze2(source.Substring(1, source.Length - 2));
+                        Result = Analyze(source.Substring(1, source.Length - 2));
                     }
                     else
                     {
-                        int firstFree = GetFreeOperationIndex(source);
-
-                        Expression left = Analyze2(source.Substring(0, firstFree));
-                        Expression right = Analyze2(source.Substring(firstFree + 1));
-
-                        Result = GetExpressionFromOperator(left, right, GetOperator(source[firstFree]));
+                        Result = GetBinaryExpression(source);
                     }
                 }
                 else
                 {
-                    int firstFree = GetFreeOperationIndex(source);
-
-                    Expression left = Analyze2(source.Substring(0, firstFree));
-                    Expression right = Analyze2(source.Substring(firstFree + 1));
-
-                    Result = GetExpressionFromOperator(left, right, GetOperator(source[firstFree]));
+                    Result = GetBinaryExpression(source);
                 }
             }
             else
             {
-                int firstFree = GetFreeOperationIndex(source);
-
-                Expression left = Analyze2(source.Substring(0, firstFree));
-                Expression right = Analyze2(source.Substring(firstFree + 1));
-
-                Result = GetExpressionFromOperator(left, right, GetOperator(source[firstFree]));
+                Result = GetBinaryExpression(source);
             }
             #endregion
 
@@ -87,12 +81,58 @@ namespace PlottingGraphsSystem
             return Result;
         }
 
+        private static Expression GetUnaryExpression(string source)
+        {
+            foreach (string func in MathFunc)
+            {
+                if (source.Contains(func))
+                {
+                    if (source.Substring(0, func.Length) == func)
+                    {
+                        Expression exp = Analyze(source.Substring(func.Length, source.Length - func.Length));
+                        switch (GetOperator(func))
+                        {
+
+                            case Operator.Abs: return Expression.Call(null, typeof(Math).GetMethods().First(x => x.Name == "Abs" && x.ReturnParameter.ParameterType == typeof(double)), exp);
+                            case Operator.Cos: return Expression.Call(null, typeof(Math).GetMethod("Cos"), exp);
+                            case Operator.Sin: return Expression.Call(null, typeof(Math).GetMethod("Sin"), exp);
+                            case Operator.Tg: return Expression.Call(null, typeof(Math).GetMethod("Tan"), exp);
+                            case Operator.Ctg: return Expression.Divide(Expression.Constant(1d), Expression.Call(null, typeof(Math).GetMethod("Tan"), exp));
+                            case Operator.Lg: return Expression.Call(null, typeof(Math).GetMethod("Log10"), exp);
+                            case Operator.Ln: return Expression.Call(null, typeof(Math).GetMethods().First(x => x.Name == "Log" && x.ReturnParameter.ParameterType == typeof(double)), exp);
+                            case Operator.Sqrt: return Expression.Call(null, typeof(Math).GetMethod("Sqrt"), exp);
+                        }
+                    }
+                }
+            }
+            return Expression.Default(typeof(double));
+        }
+
+        private static bool isMathFunction(string source)
+        {
+
+            foreach (string func in MathFunc)
+            {
+                if (source.Contains(func))
+                {
+                    if (source[0] == '-') source = source.Substring(1);
+
+                    if (source.Substring(0, func.Length) == func)
+                    {
+                        if (isValidOpeningClosingBrackets(source.Substring(func.Length, source.Length - func.Length)) && GetIndexOfClosingBracket(source, func.Length) == source.Length - 1)
+                            return true;
+                    }
+                }
+            }
+            return false;
+        }
+
         /// <summary>
         /// Возвращает индекс символа операции вне скобок по которому следует производить деление
         /// </summary>
         /// <param name="source">исходная строка</param>
         /// <returns></returns>
-        public static int GetFreeOperationIndex(string source)
+        public static int[] GetFreeOperationIndex(string source)
         {
             string temp = string.Empty;
             int brackets = 0;
@@ -103,7 +143,6 @@ namespace PlottingGraphsSystem
                 if (OpeningBrackets.Contains(source[i]))
                 {
                     brackets++;
-
                 }
                 else
                 if (ClosingBrackets.Contains(source[i]))
@@ -113,111 +152,30 @@ namespace PlottingGraphsSystem
                         brackets--;
                         dimas = true;
                     }
-                    else return -1;
+                    else
+                        throw new ArgumentException();
                 }
 
                 if (brackets == 0 && !dimas) temp += source[i]; else { temp += "#"; dimas = false; }
             }
 
-            foreach (char c in CorrectOrderOfOperation)
+            foreach (string c in CorrectOrderOfOperation)
             {
                 if (temp.Contains(c))
                 {
-                    if (temp.Count(g => g == c) != 1 || temp.IndexOf(c) != 0)
-                        return temp.IndexOf(c);
+                    int[] oper = new[] { temp.LastIndexOf(c), c.Length };
+                    return oper;
                 }
             }
-            return -1;
+            throw new ArgumentException();
 
         }
 
-        public static Expression Analyze(string source)
-        {
 
-            source = source.Trim();
-
-
-            Expression AnalysResult = Expression.Default(typeof(double));
-            //Если выражение содержит только параметр (аргумент функции)
-            if (isParametrExpression(source))
-            {
-                if (source[0] == '-')
-                    AnalysResult = Expression.Multiply(Expression.Constant(-1d), VariableExpression);
-                else
-                    AnalysResult = VariableExpression;
-            }
-            else
-            //Если выражение содержит только число или число в какой то степени
-            if (isConstatnExpression(source))
-            {
-
-                if (source.Contains('^'))
-                {
-                    if (isParametrExpression(source.Split('^')[0]))
-                        AnalysResult = Expression.Power(VariableExpression, Expression.Constant(double.Parse(source.Split('^')[1])));
-                    else
-                        AnalysResult = Expression.Power(Expression.Constant(double.Parse(source.Split('^')[0])), Expression.Constant(double.Parse(source.Split('^')[1])));
-                }
-
-                else
-                    AnalysResult = Expression.Constant(double.Parse(source));
-
-            }
-            else
-
-            //Если содержит СКОБКУ
-            if (isContainsBrackets(source))
-            {
-                //Если последовательность скобок и их количество валидны
-                if (isValidOpeningClosingBrackets(source))
-                {
-                    //Если скобка в самом начале
-                    if ((OpeningBrackets).Contains(source.First()))
-                    {
-                        //Если скобка которая открылась в самом начале закрывается в самом конце
-                        if (ClosingBrackets.Contains(source.Last()) & isSameBrackets(source, 1, source.Length - 1))
-                        {
-                            AnalysResult = Analyze(source.Substring(1, source.Length - 2));
-                        }
-                        else
-                        {
-                            //находим место закрытия скобки
-                            int indxEnd = GetIndexOfClosingBracket(source, 0);
-                            Expression left = Analyze(source.Substring(1, indxEnd - 1));
-                            Expression right = Analyze(source.Substring(indxEnd + 2));
-
-                            AnalysResult = GetExpressionFromOperator(left, right, GetOperator(source[indxEnd + 1]));
-                        }
-                    }
-                    //Если скобка не в начале, а где то там дальше
-                    else
-                    {
-                        //исправить!!!!
-                        int partitionIndex = GetCorrectIndexOfPartition(source.Remove(source.IndexOfAny(OpeningBrackets.ToCharArray())), source.IndexOfAny(OpeningBrackets.ToCharArray()));
-
-                        Expression left = Analyze(source.Remove(partitionIndex));
-                        Expression right = Analyze(source.Substring(partitionIndex + 1));
-                        AnalysResult = GetExpressionFromOperator(left, right, GetOperator(source[partitionIndex]));
-                    }
-
-                }
-                else throw new InvalidBraketsExeption();
-            }
-            else
-            //Если НЕ содержит СКОБКУ
-            {
-                int partitionIndex = GetCorrectIndexOfPartition(source);
-
-                Expression left = Analyze(source.Remove(partitionIndex));
-                Expression right = Analyze(source.Substring(partitionIndex + 1));
-                AnalysResult = GetExpressionFromOperator(left, right, GetOperator(source[partitionIndex]));
-            }
-
-            return AnalysResult;
-        }
 
         private static bool isParametrExpression(string source)
         {
+            source = source.ToLower();
             return source == "x" || source == "-x";
         }
 
@@ -295,25 +253,6 @@ namespace PlottingGraphsSystem
             //    return true;
         }
 
-        /// <summary>
-        /// Получает место разделения выражения в котором отсутствуют скобки
-        /// </summary>
-        /// <param name="source">Исходная сткрока</param>
-        /// <returns>Индекс разделения</returns>
-        private static int GetCorrectIndexOfPartition(string source, int endIndex = -1)
-        {
-            if (endIndex == -1)
-                endIndex = source.Length - 1;
-
-            foreach (char c in CorrectOrderOfOperation)
-            {
-                if (source.Contains(c))
-                {
-                    return source.IndexOf(c);
-                }
-            }
-            return -1;
-        }
 
         /// <summary>
         /// Создает выражение из двух выражений и действия над ними
@@ -322,9 +261,14 @@ namespace PlottingGraphsSystem
         /// <param name="right">правой выражение</param>
         /// <param name="operation">выполняемое действие</param>
         /// <returns></returns>
-        private static Expression GetExpressionFromOperator(Expression left, Expression right, Operator operation)
+        private static Expression GetBinaryExpression(string source)
         {
-            switch (operation)
+            int[] firstFree = GetFreeOperationIndex(source);
+
+            Expression left = Analyze(source.Substring(0, firstFree[0]));
+            Expression right = Analyze(source.Substring(firstFree[0] + 1));
+
+            switch (GetOperator(source.Substring(firstFree[0], firstFree[1])))
             {
                 case Operator.Add: return Expression.Add(left, right);
                 case Operator.Subtract: return Expression.Subtract(left, right);
@@ -382,6 +326,11 @@ namespace PlottingGraphsSystem
             return -1;
         }
 
+        /// <summary>
+        /// Убирает пробелы
+        /// </summary>
+        /// <param name="source">исходная строка</param>
+        /// <returns></returns>
         private static string RemoveClearSpaces(ref string source)
         {
             char[] arr = source.ToCharArray();
@@ -403,15 +352,25 @@ namespace PlottingGraphsSystem
         /// </summary>
         /// <param name="op">символ операции (действия)</param>
         /// <returns></returns>
-        private static Operator GetOperator(char op)
+        private static Operator GetOperator(string op)
         {
-            switch (op)
+            switch (op.ToLower())
             {
-                case '+': return Operator.Add;
-                case '-': return Operator.Subtract;
-                case '*': return Operator.Multiply;
-                case '/': return Operator.Divide;
-                case '^': return Operator.Power;
+                case "+": return Operator.Add;
+                case "-": return Operator.Subtract;
+                case "*": return Operator.Multiply;
+                case "/": return Operator.Divide;
+                case "^": return Operator.Power;
+                case "sin": return Operator.Sin;
+                case "cos": return Operator.Cos;
+                case "abs": return Operator.Abs;
+                case "sqrt": return Operator.Sqrt;
+                case "tg": return Operator.Tg;
+                case "tan": return Operator.Tg;
+                case "ctg": return Operator.Ctg;
+                case "cot": return Operator.Ctg;
+                case "ln": return Operator.Ln;
+                case "lg": return Operator.Lg;
                 default: return Operator.Undefined;
             }
         }
@@ -419,7 +378,8 @@ namespace PlottingGraphsSystem
         /// <summary>
         /// Арифметические операции
         /// </summary>
-        private enum Operator { Add, Subtract, Multiply, Divide, Power, Undefined }
+        private enum Operator { Add, Subtract, Multiply, Divide, Power, Sin, Cos, Abs, Sqrt, Tg, Ctg, Ln, Lg, Undefined }
+
 
         public static ParameterExpression VariableExpression = Expression.Parameter(typeof(double), "x");
         /// <summary>
@@ -435,7 +395,10 @@ namespace PlottingGraphsSystem
         /// <summary>
         /// Последовательность арифметических действий при анализе
         /// </summary>
-        public static string CorrectOrderOfOperation { get { return "+-*/^"; } }
+        public static string[] CorrectOrderOfOperation { get { return new[] { "+", "/", "*", "^", "lg", "ln", "ctg", "cot", "tan", "tg", "cos", "sin", "sqrt", "abs" }; } }
+
+        public static string[] MathFunc { get { return new[] { "lg", "ln", "ctg", "cot", "tan", "tg", "cos", "sin", "sqrt", "abs" }; } }
+
 
         public static string ClearSpaces { get { return " "; } }
 

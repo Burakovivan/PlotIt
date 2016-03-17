@@ -17,12 +17,11 @@ namespace PlotIt.Controllers
 
 
         [HttpPost]
+        //public ActionResult Plot(string expression, int width, int height, float dimention)
         public ActionResult Plot(string expression)
         {
-            int width = 200;
-            int height = 200;
-
-            float[,] graph = Plotter.GetPointSchema(expression, width, height);
+            float dimention = 20f;
+            float[,] graph = Plotter.GetPointSchema(expression,-30, 30,-30,30, 1/dimention);
             return Json(graph);
         }
 

@@ -1,0 +1,13 @@
+﻿()
+abs
+sqrt
+sin
+cos
+tan tg
+ctg cot
+ln
+lg
+^
+*
+/
++

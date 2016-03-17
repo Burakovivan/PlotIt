@@ -14,7 +14,7 @@
     <br />
     <hr />
     <div class="graph-panel row">
-        <canvas id="canvas" width="200" height="200"></canvas>
+        <canvas id="canvas" width="600" height="600"></canvas>
     </div>
 </div>
 
@@ -22,9 +22,14 @@
 @Scripts.Render("~/scripts/bootstrap.min.js")
 <script>
     var points = new Array();
+    var xShift = 15.0;
+    var yShift = 15.0;
+    var dimention = 20.0;
+
     function request() {
         var exp = document.getElementById('expression').value;
 
+        //var s = { 'expression': exp, 'widht': canvas.widht, 'height': canvas.height, 'dimention': dimention };
         var s = { 'expression': exp };
         $.ajax({
             url: '/Graph/Plot',
@@ -47,14 +52,25 @@
                     context.strokeStyle = "#000";
 
                     context.beginPath();
-                    context.moveTo(points[0], points[1]);
 
-                    var i = 2;
+                    var i = 0;
 
-                    while (i < (points.length)) {
-                        //console.log(i + " " + points[i]+ " " + points[i+1])
-                        context.lineTo(points[i], points[i + 1])
-                        i = i + 2;
+                    context.moveTo((points[i] + xShift) * dimention, (-points[i + 1] + yShift) * dimention);
+                    i += 2;
+                    while (i < points.length) {
+
+
+                        if (-points[i + 1] + yShift >= 0 && -points[i + 1] + yShift <= canvas.height
+                         && points[i] + xShift >= 0 && points[i] + xShift <= canvas.width) {
+
+                            console.log(i + " " + points[i] + " " + points[i + 1]);
+                            
+                            //context.fillRect((points[i] + xShift)*dimention,(-points[i + 1] + yShift)*dimention,1,1);
+                            context.lineTo((points[i] + xShift+0.001)*dimention, (-points[i + 1] + yShift+0.001)*dimention)
+                        }else
+                            console.log(i + " " + points[i] + " " + points[i + 1] + " bad");
+                        i += 2;
+
                     }
                     context.stroke();
                 }
